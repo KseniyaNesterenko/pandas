@@ -3,30 +3,38 @@
 JSON_FILE=$1
 NODE_INDEX=$2
 
-PROJECT_ROOT=$(pwd)
-TEST_DIR="pandas/tests/indexing"
+# 1. Подготовка папки (Изоляция)
+if [ -d "pandas" ]; then
+    mv pandas pandas_src
+fi
 
-# 1. Формируем список целей
-# Мы берем первую часть (до точки) как имя файла, остальное как класс
+TEST_DIR="pandas_src/tests/indexing"
+
+# 2. Умное формирование путей
+# Мы берем строку "multiindex.test_setitem"
+# И пробуем превратить её в "multiindex/test_setitem.py"
 TESTS=$(jq -r ".containers[$((NODE_INDEX-1))].tests[]" $JSON_FILE | sed 's/Grouped://' | awk -v dir="$TEST_DIR" '{
-    n = split($0, parts, ".");
-    if (n > 1) {
-        # parts[1] - файл, остальное - класс/подмодуль
-        # Если есть вложенность (например, multiindex.test_loc)
-        # нам нужно превратить это в multiindex/test_loc.py
+    # Заменяем все точки на слэши
+    path = $0;
+    gsub(/\./, "/", path);
 
-        path = parts[1];
-        class = parts[2];
+    # 1. Проверяем формат: папка/файл.py (например, multiindex/test_setitem.py)
+    file_path = dir "/" path ".py";
 
-        # Если частей больше 2, значит первая часть была папкой
-        if (n > 2) {
-             print dir "/" parts[1] "/" parts[2] ".py::" parts[3]
-        } else {
-             print dir "/" parts[1] ".py::" parts[2]
+    # 2. Проверяем формат: папка/файл.py::Класс
+    # Для этого берем всё до последнего слэша как путь, а последний элемент как класс
+    split(path, parts, "/");
+    if (length(parts) > 1) {
+        base_path = "";
+        for (i=1; i<length(parts); i++) {
+            base_path = (i==1) ? parts[i] : base_path "/" parts[i];
         }
+        class_path = dir "/" base_path ".py::" parts[length(parts)];
     } else {
-        print dir "/" $0 ".py"
+        class_path = dir "/" path ".py";
     }
+
+    print file_path " " class_path
 }')
 
 if [ -z "$TESTS" ] || [ "$TESTS" == "null" ]; then
@@ -34,15 +42,25 @@ if [ -z "$TESTS" ] || [ "$TESTS" == "null" ]; then
   exit 0
 fi
 
-# 2. Изоляция: переименовываем папку pandas, чтобы не было конфликта импортов
-if [ -d "pandas" ]; then
-    mv pandas pandas_src
-fi
-
 echo "-------------------------------------------------------"
 echo "NODE INDEX: $NODE_INDEX"
-echo "TARGETS READY"
 echo "-------------------------------------------------------"
 
-# 3. Запуск. Заменяем начальный путь на переименованную папку
-echo "$TESTS" | sed 's|^pandas/|pandas_src/|' | xargs python -m pytest --noconftest -p no:warnings -p no:conftest
+# 3. Запуск Pytest с проверкой существования
+FINAL_TARGETS=""
+for pair in $TESTS; do
+    # pair содержит два варианта, разделенных пробелом.
+    # Проверяем первый (как файл)
+    FILE_ONLY=$(echo $pair | cut -d' ' -f1)
+    if [ -f "$FILE_ONLY" ]; then
+        FINAL_TARGETS="$FINAL_TARGETS $FILE_ONLY"
+    else
+        # Если файла нет, значит это был Класс (второй вариант)
+        CLASS_TARGET=$(echo $pair | cut -d' ' -f2)
+        FINAL_TARGETS="$FINAL_TARGETS $CLASS_TARGET"
+    fi
+done
+
+echo "EXECUTING: $FINAL_TARGETS"
+
+python -m pytest --noconftest -p no:warnings -p no:conftest $FINAL_TARGETS
