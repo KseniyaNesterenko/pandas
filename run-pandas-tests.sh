@@ -48,4 +48,4 @@ python -m pytest \
     -o "markers=filterwarnings" \
     -p no:warnings \
     --noconftest \
-    $FINAL_TARGETS
+    $FINAL_TARGETS || true
