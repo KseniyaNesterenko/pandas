@@ -3,12 +3,16 @@
 JSON_FILE=$1
 NODE_INDEX=$2
 
-# 1. Изоляция (переименовываем, чтобы не было ImportError)
-if [ -d "pandas" ]; then
-    mv pandas pandas_src
-fi
+# 1. Создаем чистую временную папку для тестов
+# Это исключит любые конфликты импортов с исходным кодом
+mkdir -p isolated_tests
 
-TEST_DIR="pandas_src/tests/indexing"
+# Копируем только папку с тестами индексации
+# Мы делаем это ДО того, как что-то переименуем
+cp -r pandas/tests/indexing/* isolated_tests/
+
+# Теперь удаляем папку pandas совсем, чтобы она не смущала Python
+rm -rf pandas
 
 # 2. Получаем список групп из JSON
 RAW_GROUPS=$(jq -r ".containers[$((NODE_INDEX-1))].tests[]" $JSON_FILE | sed 's/Grouped://')
@@ -16,44 +20,31 @@ RAW_GROUPS=$(jq -r ".containers[$((NODE_INDEX-1))].tests[]" $JSON_FILE | sed 's/
 FINAL_TARGETS=""
 
 for group in $RAW_GROUPS; do
-    # Пытаемся понять, что это за тест. Варианты:
-    # 1. Это просто файл (test_iat)
-    # 2. Это файл в подпапке (multiindex.test_getitem)
-    # 3. Это класс в файле (test_loc.TestLoc)
-    # 4. Это класс в файле в подпапке (multiindex.test_loc.TestMultiIndexLoc)
-
-    # Заменяем точки на слэши для проверки путей
+    # Теперь ищем файлы в нашей изолированной папке
     path_with_slashes=$(echo $group | tr '.' '/')
 
-    # ПРОВЕРКА 1: Это файл в корне indexing или в подпапке?
-    if [ -f "$TEST_DIR/$path_with_slashes.py" ]; then
-        FINAL_TARGETS="$FINAL_TARGETS $TEST_DIR/$path_with_slashes.py"
+    # Проверка 1: Файл
+    if [ -f "isolated_tests/$path_with_slashes.py" ]; then
+        FINAL_TARGETS="$FINAL_TARGETS isolated_tests/$path_with_slashes.py"
         continue
     fi
 
-    # ПРОВЕРКА 2: Это Класс внутри файла? (отрезаем последнюю часть)
-    # Например: test_loc.TestLoc -> файл test_loc.py, класс TestLoc
-    base_name="${group%.*}" # всё до последней точки
-    class_name="${group##*.}" # всё после последней точки
+    # Проверка 2: Класс в файле
+    base_name="${group%.*}"
+    class_name="${group##*.}"
     base_path_slashes=$(echo $base_name | tr '.' '/')
 
-    if [ -f "$TEST_DIR/$base_path_slashes.py" ]; then
-        FINAL_TARGETS="$FINAL_TARGETS $TEST_DIR/$base_path_slashes.py::$class_name"
+    if [ -f "isolated_tests/$base_path_slashes.py" ]; then
+        FINAL_TARGETS="$FINAL_TARGETS isolated_tests/$base_path_slashes.py::$class_name"
         continue
     fi
-
-    echo "WARNING: Could not resolve test target for group: $group"
 done
 
 echo "-------------------------------------------------------"
 echo "NODE INDEX: $NODE_INDEX"
-if [ -z "$FINAL_TARGETS" ]; then
-    echo "NO VALID TESTS FOUND"
-    exit 0
-fi
-echo "EXECUTING: $FINAL_TARGETS"
+echo "EXECUTING ON ISOLATED TESTS"
 echo "-------------------------------------------------------"
 
 # 3. Запуск
-# Используем python -m pytest для гарантии использования установленного pandas
+# Теперь в текущей папке нет папки pandas, и импорты пойдут из site-packages
 python -m pytest --noconftest -p no:warnings -p no:conftest $FINAL_TARGETS
