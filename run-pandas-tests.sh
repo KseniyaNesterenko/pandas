@@ -3,64 +3,57 @@
 JSON_FILE=$1
 NODE_INDEX=$2
 
-# 1. Подготовка папки (Изоляция)
+# 1. Изоляция (переименовываем, чтобы не было ImportError)
 if [ -d "pandas" ]; then
     mv pandas pandas_src
 fi
 
 TEST_DIR="pandas_src/tests/indexing"
 
-# 2. Умное формирование путей
-# Мы берем строку "multiindex.test_setitem"
-# И пробуем превратить её в "multiindex/test_setitem.py"
-TESTS=$(jq -r ".containers[$((NODE_INDEX-1))].tests[]" $JSON_FILE | sed 's/Grouped://' | awk -v dir="$TEST_DIR" '{
-    # Заменяем все точки на слэши
-    path = $0;
-    gsub(/\./, "/", path);
+# 2. Получаем список групп из JSON
+RAW_GROUPS=$(jq -r ".containers[$((NODE_INDEX-1))].tests[]" $JSON_FILE | sed 's/Grouped://')
 
-    # 1. Проверяем формат: папка/файл.py (например, multiindex/test_setitem.py)
-    file_path = dir "/" path ".py";
+FINAL_TARGETS=""
 
-    # 2. Проверяем формат: папка/файл.py::Класс
-    # Для этого берем всё до последнего слэша как путь, а последний элемент как класс
-    split(path, parts, "/");
-    if (length(parts) > 1) {
-        base_path = "";
-        for (i=1; i<length(parts); i++) {
-            base_path = (i==1) ? parts[i] : base_path "/" parts[i];
-        }
-        class_path = dir "/" base_path ".py::" parts[length(parts)];
-    } else {
-        class_path = dir "/" path ".py";
-    }
+for group in $RAW_GROUPS; do
+    # Пытаемся понять, что это за тест. Варианты:
+    # 1. Это просто файл (test_iat)
+    # 2. Это файл в подпапке (multiindex.test_getitem)
+    # 3. Это класс в файле (test_loc.TestLoc)
+    # 4. Это класс в файле в подпапке (multiindex.test_loc.TestMultiIndexLoc)
 
-    print file_path " " class_path
-}')
+    # Заменяем точки на слэши для проверки путей
+    path_with_slashes=$(echo $group | tr '.' '/')
 
-if [ -z "$TESTS" ] || [ "$TESTS" == "null" ]; then
-  echo "No tests found for node $NODE_INDEX"
-  exit 0
-fi
+    # ПРОВЕРКА 1: Это файл в корне indexing или в подпапке?
+    if [ -f "$TEST_DIR/$path_with_slashes.py" ]; then
+        FINAL_TARGETS="$FINAL_TARGETS $TEST_DIR/$path_with_slashes.py"
+        continue
+    fi
+
+    # ПРОВЕРКА 2: Это Класс внутри файла? (отрезаем последнюю часть)
+    # Например: test_loc.TestLoc -> файл test_loc.py, класс TestLoc
+    base_name="${group%.*}" # всё до последней точки
+    class_name="${group##*.}" # всё после последней точки
+    base_path_slashes=$(echo $base_name | tr '.' '/')
+
+    if [ -f "$TEST_DIR/$base_path_slashes.py" ]; then
+        FINAL_TARGETS="$FINAL_TARGETS $TEST_DIR/$base_path_slashes.py::$class_name"
+        continue
+    fi
+
+    echo "WARNING: Could not resolve test target for group: $group"
+done
 
 echo "-------------------------------------------------------"
 echo "NODE INDEX: $NODE_INDEX"
+if [ -z "$FINAL_TARGETS" ]; then
+    echo "NO VALID TESTS FOUND"
+    exit 0
+fi
+echo "EXECUTING: $FINAL_TARGETS"
 echo "-------------------------------------------------------"
 
-# 3. Запуск Pytest с проверкой существования
-FINAL_TARGETS=""
-for pair in $TESTS; do
-    # pair содержит два варианта, разделенных пробелом.
-    # Проверяем первый (как файл)
-    FILE_ONLY=$(echo $pair | cut -d' ' -f1)
-    if [ -f "$FILE_ONLY" ]; then
-        FINAL_TARGETS="$FINAL_TARGETS $FILE_ONLY"
-    else
-        # Если файла нет, значит это был Класс (второй вариант)
-        CLASS_TARGET=$(echo $pair | cut -d' ' -f2)
-        FINAL_TARGETS="$FINAL_TARGETS $CLASS_TARGET"
-    fi
-done
-
-echo "EXECUTING: $FINAL_TARGETS"
-
+# 3. Запуск
+# Используем python -m pytest для гарантии использования установленного pandas
 python -m pytest --noconftest -p no:warnings -p no:conftest $FINAL_TARGETS
