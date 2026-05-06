@@ -1,0 +1,15 @@
+{
+  "containers" : [ {
+    "tests" : [ "Grouped:test_coercion.TestInsertIndexCoercion", "Grouped:test_coercion.TestWhereCoercion", "Grouped:test_iat", "Grouped:multiindex.test_partial", "Grouped:test_floats.TestFloatIndexers", "Grouped:test_coercion.TestReplaceSeriesCoercion", "Grouped:multiindex.test_slice.TestMultiIndexSlicers", "Grouped:test_check_indexer", "Grouped:test_loc.TestLocBooleanMask", "Grouped:test_loc.TestLoc", "Grouped:multiindex.test_loc.TestKeyErrorsWithMultiIndex", "Grouped:test_scalar", "Grouped:multiindex.test_loc", "Grouped:test_loc.TestLabelSlicing" ],
+    "total_time" : 0.24070000000000005
+  }, {
+    "tests" : [ "Grouped:test_coercion.TestSetitemCoercion", "Grouped:test_iloc.TestILocCallable", "Grouped:multiindex.test_setitem", "Grouped:test_indexers.TestValidateIndices", "Grouped:test_iloc.TestILocSetItemDuplicateColumns", "Grouped:multiindex.test_setitem.TestMultiIndexSetItem", "Grouped:test_chaining_and_caching.TestChaining", "Grouped:test_loc.TestLocWithMultiIndex", "Grouped:test_scalar.TestAtAndiAT", "Grouped:test_loc.TestLocSetitemWithExpansion", "Grouped:test_iloc.TestILocErrors", "Grouped:multiindex.test_sorted.TestMultiIndexSorted", "Grouped:test_loc.TestLocBaseIndependent", "Grouped:test_indexing.TestFancy" ],
+    "total_time" : 0.4235
+  }, {
+    "tests" : [ "Grouped:multiindex.test_chaining_and_caching", "Grouped:test_loc", "Grouped:test_loc.TestLocSeries", "Grouped:test_loc.TestLocListlike", "Grouped:test_indexing.TestMisc", "Grouped:multiindex.test_setitem.TestSetitemWithExpansionMultiIndex", "Grouped:test_indexing.TestDataframeNoneCoercion", "Grouped:multiindex.test_partial.TestMultiIndexPartial", "Grouped:default_group", "Grouped:test_loc.TestLocCallable", "Grouped:test_datetime", "Grouped:test_indexing", "Grouped:test_scalar.TestMultiIndexScalar", "Grouped:multiindex.test_multiindex.TestMultiIndexBasic" ],
+    "total_time" : 0.8775999999999999
+  }, {
+    "tests" : [ "Grouped:test_categorical.TestCategoricalIndex", "Grouped:test_iloc.TestiLocBaseIndependent", "Grouped:multiindex.test_getitem", "Grouped:test_na_indexing", "Grouped:test_chaining_and_caching.TestCaching", "Grouped:test_datetime.TestDatetimeIndex", "Grouped:multiindex.test_datetime", "Grouped:test_iloc.TestILocSeries", "Grouped:test_indexers", "Grouped:multiindex.test_loc.TestMultiIndexLoc", "Grouped:multiindex.test_iloc", "Grouped:test_loc.TestPartialStringSlicing" ],
+    "total_time" : 0.42029999999999995
+  } ]
+}
