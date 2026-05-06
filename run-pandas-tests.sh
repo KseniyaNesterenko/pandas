@@ -3,21 +3,30 @@
 JSON_FILE=$1
 NODE_INDEX=$2
 
-# 1. Пути
 PROJECT_ROOT=$(pwd)
 TEST_DIR="pandas/tests/indexing"
 
-# 2. Умное формирование путей
-# Мы заменяем точки на слэши во всей строке, кроме последнего элемента (который может быть классом)
+# 1. Формируем список целей
+# Мы берем первую часть (до точки) как имя файла, остальное как класс
 TESTS=$(jq -r ".containers[$((NODE_INDEX-1))].tests[]" $JSON_FILE | sed 's/Grouped://' | awk -v dir="$TEST_DIR" '{
-    # Заменяем точки на слэши, чтобы получить путь к файлу
-    gsub(/\./, "/", $1);
+    n = split($0, parts, ".");
+    if (n > 1) {
+        # parts[1] - файл, остальное - класс/подмодуль
+        # Если есть вложенность (например, multiindex.test_loc)
+        # нам нужно превратить это в multiindex/test_loc.py
 
-    # Теперь нужно проверить: это папка/файл или папка/файл/Класс?
-    # В Pandas большинство тестов индексации лежат по пути: dir/имя.py
-    # Если это multiindex/test_loc, то путь: dir/multiindex/test_loc.py
+        path = parts[1];
+        class = parts[2];
 
-    print dir "/" $1 ".py"
+        # Если частей больше 2, значит первая часть была папкой
+        if (n > 2) {
+             print dir "/" parts[1] "/" parts[2] ".py::" parts[3]
+        } else {
+             print dir "/" parts[1] ".py::" parts[2]
+        }
+    } else {
+        print dir "/" $0 ".py"
+    }
 }')
 
 if [ -z "$TESTS" ] || [ "$TESTS" == "null" ]; then
@@ -25,15 +34,15 @@ if [ -z "$TESTS" ] || [ "$TESTS" == "null" ]; then
   exit 0
 fi
 
+# 2. Изоляция: переименовываем папку pandas, чтобы не было конфликта импортов
+if [ -d "pandas" ]; then
+    mv pandas pandas_src
+fi
+
 echo "-------------------------------------------------------"
 echo "NODE INDEX: $NODE_INDEX"
-echo "TARGETS:"
-echo "$TESTS"
+echo "TARGETS READY"
 echo "-------------------------------------------------------"
 
-# Важный хак: удаляем папку с исходниками, чтобы pytest не пытался её импортировать
-# Вместо этого он будет использовать установленный 'pip install pandas'
-mv pandas pandas_src
-
-# Запускаем pytest, используя новый путь (через pandas_src)
-echo "$TESTS" | sed 's/^pandas\//pandas_src\//' | xargs python -m pytest --noconftest -p no:warnings -p no:conftest
+# 3. Запуск. Заменяем начальный путь на переименованную папку
+echo "$TESTS" | sed 's|^pandas/|pandas_src/|' | xargs python -m pytest --noconftest -p no:warnings -p no:conftest
